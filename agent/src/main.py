@@ -132,7 +132,7 @@ async def entrypoint(ctx: JobContext):
 
     async def close_session():
         logger.info("Closing session...")
-        await session.close()
+        await session.shutdown()
 
     @session.on("user_input_transcribed")
     def on_user_input_transcribed(ev) -> None:
