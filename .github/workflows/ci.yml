@@ -1,0 +1,104 @@
+name: Python CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./agent/Dockerfile
+          push: false
+          tags: sir-henry-agent:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          load: true
+
+      - name: Save Docker image
+        run: |
+          docker save sir-henry-agent:test -o image.tar
+
+      - name: Upload Docker image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image
+          path: image.tar
+          retention-days: 1
+
+  lint:
+    name: Lint with Black
+    needs: build
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Docker image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+
+      - name: Load Docker image
+        run: |
+          docker load -i image.tar
+
+      - name: Install dev dependencies and run Black
+        run: |
+          docker run --rm \
+            -w /app \
+            sir-henry-agent:test \
+            sh -c "uv sync --extra dev && uv run black --check src tests"
+
+  test-and-coverage:
+    name: Run Tests and Coverage
+    needs: [build, lint]
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Docker image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+
+      - name: Load Docker image
+        run: |
+          docker load -i image.tar
+
+      - name: Install dev dependencies and run pytest
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}/agent":/output \
+            -w /app \
+            sir-henry-agent:test \
+            sh -c "uv sync --extra dev && uv run pytest tests/ -v --cov=src --cov-report=term-missing --cov-report=xml:/output/coverage.xml"
+
+      - name: Upload coverage to Codecov (optional)
+        if: always()
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./agent/coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false

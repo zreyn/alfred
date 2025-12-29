@@ -1,0 +1,63 @@
+# Git files
+.git
+.gitignore
+.github
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+.venv/
+**/.venv/
+venv/
+env/
+ENV/
+
+# Python version pinning (use container's Python)
+.python-version
+**/.python-version
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Test files
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Documentation
+*.md
+!README.md
+
+# # Environment files
+# .env
+# .env.*
+
+# Large model files (optional - remove these lines to bake models into images)
+*.gguf
+
+# Output files
+**/last_output.wav
+
+# Docker files themselves
+docker-compose.yml
+Dockerfile
+.dockerignore
