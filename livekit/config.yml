@@ -7,7 +7,7 @@ rtc:
   port_range_start: 50000
   port_range_end: 50100
   use_external_ip: false
-  use_ice_lite: true
+  use_ice_lite: false
   enable_loopback_candidate: false
 
 keys:

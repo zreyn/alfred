@@ -38,10 +38,10 @@ services:
       - |
         echo "Waiting for Ollama to be ready..."
         sleep 5
-        echo "Pulling llama3.2:3b model..."
-        curl -X POST http://localhost:11434/api/pull -d '{"name": "llama3.2:3b"}'
+        echo "Pulling deepseek-r1:8b model..."
+        curl -X POST http://localhost:11434/api/pull -d '{"name": "deepseek-r1:8b"}'
         echo "Model pulled. Keeping it loaded..."
-        curl -X POST http://localhost:11434/api/generate -d '{"model": "llama3.2:3b", "prompt": "test", "keep_alive": -1}'
+        curl -X POST http://localhost:11434/api/generate -d '{"model": "deepseek-r1:8b", "prompt": "test", "keep_alive": -1}'
         echo "Init complete"
 
   livekit-server:
@@ -62,8 +62,6 @@ services:
     network_mode: host  # Use host network to reach livekit and ollama
     depends_on:
       ollama:
-        condition: service_healthy
-      f5-tts-service:
         condition: service_healthy
       livekit-server:
         condition: service_started
@@ -94,8 +92,25 @@ services:
       retries: 5
       start_period: 60s  # Allow time for model loading
 
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: open-webui
+    network_mode: host  # Use host network to reach ollama
+    environment:
+      PORT: 3000
+      OLLAMA_BASE_URL: http://localhost:11434
+    volumes:
+      - webui_data:/app/backend/data
+    depends_on:
+      ollama:
+        condition: service_healthy
+      ollama-init:
+        condition: service_completed_successfully
+    restart: always
+
 
 volumes:
   ollama_data:
     driver: local
-
+  webui_data:
+    driver: local

@@ -26,19 +26,19 @@ def _setup_logging():
     root_logger.addHandler(console_handler)
 
     # Silence noisy third-party loggers
-    for name in [
-        "livekit",
-        "livekit.agents",
-        "livekit.rtc",
-        "faster_whisper",
-        "asyncio",
-        "httpx",
-        "httpcore",
-    ]:
-        lib_logger = logging.getLogger(name)
-        lib_logger.handlers.clear()
-        lib_logger.propagate = False
-        lib_logger.addHandler(logging.NullHandler())
+    # for name in [
+    #     "livekit",
+    #     "livekit.agents",
+    #     "livekit.rtc",
+    #     "faster_whisper",
+    #     "asyncio",
+    #     "httpx",
+    #     "httpcore",
+    # ]:
+    #     lib_logger = logging.getLogger(name)
+    #     lib_logger.handlers.clear()
+    #     lib_logger.propagate = False
+    #     lib_logger.addHandler(logging.NullHandler())
 
     # Monkey-patch to block ALL handler additions after setup
     _original_addHandler = logging.Logger.addHandler

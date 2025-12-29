@@ -19,6 +19,7 @@ Run this before building Docker images.
 import os
 import sys
 from pathlib import Path
+import torch
 
 # Models directory (relative to agent/)
 MODELS_DIR = Path(__file__).parent.parent / "models"
