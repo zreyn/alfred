@@ -2,10 +2,12 @@
 # /// script
 # dependencies = [
 #   "livekit",
+#   "livekit-api",
 #   "sounddevice",
 #   "python-dotenv",
 #   "asyncio",
 #   "numpy",
+#   "pvporcupine"
 # ]
 # ///
 import os
@@ -18,7 +20,9 @@ import threading
 import select
 import termios
 import tty
+import struct
 
+import pvporcupine
 from livekit import rtc
 from livekit.api import (
     AccessToken,
@@ -33,7 +37,7 @@ from dotenv import load_dotenv
 from signal import SIGINT, SIGTERM
 from auth import generate_token
 
-load_dotenv()
+load_dotenv("../.env.user")
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(name)s | %(levelname)s | %(message)s",
@@ -49,6 +53,12 @@ LIVEKIT_API_SECRET = os.environ.get("LIVEKIT_API_SECRET")
 LIVEKIT_ROOM = os.environ.get("LIVEKIT_ROOM", "testing")
 AGENT_NAME = os.environ.get("AGENT_NAME", "voice-agent")
 CLIENT_IDENTITY = os.environ.get("CLIENT_IDENTITY", "human-user")
+PICOVOICE_ACCESS_KEY = os.environ.get("PICOVOICE_ACCESS_KEY")
+KEYWORD_PATH = os.path.join(
+    os.path.dirname(__file__),
+    "../models/picovoice-porcupine/Hey-Alfred_en_mac_v4_0_0/Hey-Alfred_en_mac_v4_0_0.ppn",
+)
+
 
 SAMPLE_RATE = 48000  # 48kHz to match DC Microphone native rate
 NUM_CHANNELS = 1
@@ -69,6 +79,45 @@ def _esc(*codes: int) -> str:
 def _normalize_db(amplitude_db: float, db_min: float, db_max: float) -> float:
     amplitude_db = max(db_min, min(amplitude_db, db_max))
     return (amplitude_db - db_min) / (db_max - db_min)
+
+
+def wait_for_wake_word(access_key: str, keyword_path: str):
+    """Listen for a wake word before proceeding."""
+    if not access_key:
+        logger.error("PICOVOICE_ACCESS_KEY is not set.")
+        raise ValueError("Missing PICOVOICE_ACCESS_KEY")
+
+    porcupine = None
+    audio_stream = None
+    try:
+        porcupine = pvporcupine.create(access_key=access_key, keyword_paths=[keyword_path])
+        logger.info(f"Initialized Porcupine with keyword at {keyword_path}")
+        logger.info("Listening for wake word...")
+
+        audio_stream = sd.InputStream(
+            samplerate=porcupine.sample_rate,
+            channels=1,
+            dtype="int16",
+            blocksize=porcupine.frame_length,
+        )
+        audio_stream.start()
+
+        while True:
+            pcm_np = audio_stream.read(porcupine.frame_length)[0]
+            pcm_list = pcm_np.flatten().tolist()
+            keyword_index = porcupine.process(pcm_list)
+            if keyword_index >= 0:
+                logger.info("Wake word detected!")
+                break
+    except pvporcupine.PorcupineError as e:
+        logger.error(f"Porcupine error: {e}")
+        raise
+    finally:
+        if porcupine:
+            porcupine.delete()
+        if audio_stream:
+            audio_stream.stop()
+            audio_stream.close()
 
 
 class AudioStreamer:
@@ -600,6 +649,13 @@ async def main(participant_name: str, enable_aec: bool = True):
 
     if not LIVEKIT_URL or not ROOM_NAME:  # pragma: no cover
         logger.error("Missing LIVEKIT_URL or ROOM_NAME environment variables")
+        return
+
+    # Wait for the wake word
+    try:
+        wait_for_wake_word(PICOVOICE_ACCESS_KEY, KEYWORD_PATH)
+    except (ValueError, pvporcupine.PorcupineError) as e:
+        logger.error(f"Failed to initialize wake word detection: {e}")
         return
 
     # Create audio streamer with loop reference
