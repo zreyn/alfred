@@ -132,7 +132,7 @@ async def entrypoint(ctx: JobContext):
 
     async def close_session():
         logger.info("Closing session...")
-        await session.shutdown()
+        session.shutdown()
 
     @session.on("user_input_transcribed")
     def on_user_input_transcribed(ev) -> None:
@@ -172,7 +172,8 @@ async def entrypoint(ctx: JobContext):
         room=ctx.room,
     )
 
-    logger.info("Agent session started.")
+    logger.info("Agent session finished, disconnecting...")
+    await ctx.room.disconnect()
 
 
 def main():

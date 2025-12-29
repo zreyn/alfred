@@ -637,290 +637,297 @@ class AudioStreamer:
 
 
 async def main(participant_name: str, enable_aec: bool = True):
-    logger = logging.getLogger(__name__)
-    logger.info("=== STARTING AUDIO STREAMER ===")
+    while True:
+        logger = logging.getLogger(__name__)
+        logger.info("=== WAITING FOR WAKE WORD ===")
 
-    # Get the running event loop
-    loop = asyncio.get_running_loop()
+        # Get the running event loop
+        loop = asyncio.get_running_loop()
 
-    # Verify environment
-    logger.info(f"LIVEKIT_URL: {LIVEKIT_URL}")
-    logger.info(f"ROOM_NAME: {ROOM_NAME}")
+        # Verify environment
+        logger.info(f"LIVEKIT_URL: {LIVEKIT_URL}")
+        logger.info(f"ROOM_NAME: {ROOM_NAME}")
 
-    if not LIVEKIT_URL or not ROOM_NAME:  # pragma: no cover
-        logger.error("Missing LIVEKIT_URL or ROOM_NAME environment variables")
-        return
+        if not LIVEKIT_URL or not ROOM_NAME:  # pragma: no cover
+            logger.error("Missing LIVEKIT_URL or ROOM_NAME environment variables")
+            return
 
-    # Wait for the wake word
-    try:
-        wait_for_wake_word(PICOVOICE_ACCESS_KEY, KEYWORD_PATH)
-    except (ValueError, pvporcupine.PorcupineError) as e:
-        logger.error(f"Failed to initialize wake word detection: {e}")
-        return
+        # Wait for the wake word
+        try:
+            wait_for_wake_word(PICOVOICE_ACCESS_KEY, KEYWORD_PATH)
+        except (ValueError, pvporcupine.PorcupineError) as e:
+            logger.error(f"Failed to initialize wake word detection: {e}")
+            return
 
-    # Create audio streamer with loop reference
-    streamer = AudioStreamer(enable_aec, loop=loop)
+        # Create audio streamer with loop reference
+        streamer = AudioStreamer(enable_aec, loop=loop)
 
-    # Create room
-    room = rtc.Room(loop=loop)
-    streamer.room = room
+        # Create room
+        room = rtc.Room(loop=loop)
+        streamer.room = room
 
-    # Audio processing task
-    async def audio_processing_task():  # pragma: no cover
-        """Process audio frames from input queue and send to LiveKit"""
-        frames_sent = 0
-        logger.info("Audio processing task started")
+        # Audio processing task
+        async def audio_processing_task():  # pragma: no cover
+            """Process audio frames from input queue and send to LiveKit"""
+            frames_sent = 0
+            logger.info("Audio processing task started")
 
-        while streamer.running:
-            try:
-                # Get audio frame from input callback
-                frame = await asyncio.wait_for(
-                    streamer.audio_input_queue.get(), timeout=1.0
-                )
-                await streamer.source.capture_frame(frame)
-                frames_sent += 1
+            while streamer.running:
+                try:
+                    # Get audio frame from input callback
+                    frame = await asyncio.wait_for(
+                        streamer.audio_input_queue.get(), timeout=1.0
+                    )
+                    await streamer.source.capture_frame(frame)
+                    frames_sent += 1
 
-                if frames_sent <= 5:
-                    logger.info(f"Sent frame {frames_sent} to LiveKit source")
-                elif frames_sent % 100 == 0:
-                    logger.info(f"Sent {frames_sent} frames total to LiveKit")
+                    if frames_sent <= 5:
+                        logger.info(f"Sent frame {frames_sent} to LiveKit source")
+                    elif frames_sent % 100 == 0:
+                        logger.info(f"Sent {frames_sent} frames total to LiveKit")
 
-            except asyncio.TimeoutError:
-                logger.debug("No audio frames in queue (timeout)")
-                continue
-            except Exception as e:
-                logger.error(f"Error in audio processing: {e}")
-                break
+                except asyncio.TimeoutError:
+                    logger.debug("No audio frames in queue (timeout)")
+                    continue
+                except Exception as e:
+                    logger.error(f"Error in audio processing: {e}")
+                    break
 
-        logger.info(f"Audio processing task ended. Total frames sent: {frames_sent}")
+            logger.info(f"Audio processing task ended. Total frames sent: {frames_sent}")
 
-    # Meter display task
-    async def meter_task():  # pragma: no cover
-        """Display audio level meter"""
-        logger.info("Meter task started")
-        while streamer.running and streamer.meter_running:
-            streamer.print_audio_meter()
-            await asyncio.sleep(1 / FPS)
-        logger.info("Meter task ended")
+        # Meter display task
+        async def meter_task():  # pragma: no cover
+            """Display audio level meter"""
+            logger.info("Meter task started")
+            while streamer.running and streamer.meter_running:
+                streamer.print_audio_meter()
+                await asyncio.sleep(1 / FPS)
+            logger.info("Meter task ended")
 
-    # Function to handle received audio frames
-    async def receive_audio_frames(  # pragma: no cover
-        stream: rtc.AudioStream, participant: rtc.RemoteParticipant
-    ):
-        frames_received = 0
-        logger.info("Audio receive task started")
+        # Function to handle received audio frames
+        async def receive_audio_frames(  # pragma: no cover
+            stream: rtc.AudioStream, participant: rtc.RemoteParticipant
+        ):
+            frames_received = 0
+            logger.info("Audio receive task started")
 
-        # Use participant info passed from event handler
-        participant_id = participant.sid
-        participant_name = participant.identity or f"User_{participant.sid[:8]}"
+            # Use participant info passed from event handler
+            participant_id = participant.sid
+            participant_name = participant.identity or f"User_{participant.sid[:8]}"
 
-        logger.info(
-            f"Receiving audio from participant: {participant_name} ({participant_id})"
-        )
-
-        async for frame_event in stream:
-            if not streamer.running:
-                break
-
-            frames_received += 1
-            if frames_received <= 5:
-                logger.info(
-                    f"Received audio frame {frames_received} from {participant_name}"
-                )
-            elif frames_received % 100 == 0:
-                logger.info(
-                    f"Received {frames_received} frames total from {participant_name}"
-                )
-
-            # Only process/play audio if this participant is the active remote track
-            if (
-                streamer.active_remote_participant_id == participant_id
-                and streamer.remote_playback_enabled
-            ):
-                # Calculate dB level for this participant
-                frame_data = frame_event.frame.data
-                if len(frame_data) > 0:
-                    # Convert to numpy array for dB calculation
-                    audio_samples = np.frombuffer(frame_data, dtype=np.int16)
-                    if len(audio_samples) > 0:
-                        rms = np.sqrt(np.mean(audio_samples.astype(np.float32) ** 2))
-                        max_int16 = np.iinfo(np.int16).max
-                        participant_db = 20.0 * np.log10(rms / max_int16 + 1e-6)
-
-                        # Update participant info
-                        with streamer.participants_lock:
-                            streamer.participants[participant_id] = {
-                                "name": participant_name,
-                                "db_level": participant_db,
-                                "last_update": time.time(),
-                            }
-
-                # Add received audio to output buffer
-                audio_data = frame_event.frame.data.tobytes()
-                with streamer.output_lock:
-                    streamer.output_buffer.extend(audio_data)
-
-        logger.info(
-            f"Audio receive task ended for {participant_name}. Total frames received: {frames_received}"
-        )
-
-        # Clean up participant when stream ends
-        with streamer.participants_lock:
-            if participant_id in streamer.participants:
-                del streamer.participants[participant_id]
-
-    # Event handlers
-    @room.on("track_subscribed")
-    def on_track_subscribed(  # pragma: no cover
-        track: rtc.Track,
-        publication: rtc.RemoteTrackPublication,
-        participant: rtc.RemoteParticipant,
-    ):
-        logger.info(
-            "track subscribed: %s from participant %s (%s)",
-            publication.sid,
-            participant.sid,
-            participant.identity,
-        )
-        if track.kind == rtc.TrackKind.KIND_AUDIO:
-            # Only allow playback for the first subscribed remote audio track
-            if streamer.active_remote_participant_id is None:
-                streamer.active_remote_participant_id = participant.sid
-                logger.info(
-                    f"Activating remote playback for first subscribed participant: {participant.identity}"
-                )
-                audio_stream = rtc.AudioStream(
-                    track, sample_rate=SAMPLE_RATE, num_channels=NUM_CHANNELS
-                )
-                asyncio.ensure_future(receive_audio_frames(audio_stream, participant))
-            else:
-                logger.info(
-                    f"Ignoring additional remote audio track from {participant.identity}; active playback is participant {streamer.active_remote_participant_id}"
-                )
-
-    # Connect to LiveKit room
-    logger.info("Connected!")
-
-    @room.on("participant_connected")
-    def on_participant_connected(participant: rtc.RemoteParticipant):  # pragma: no cover
-        logger.info(
-            "participant connected: %s %s", participant.sid, participant.identity
-        )
-        # Initialize participant in our tracking
-        with streamer.participants_lock:
-            streamer.participants[participant.sid] = {
-                "name": participant.identity or f"User_{participant.sid[:8]}",
-                "db_level": INPUT_DB_MIN,
-                "last_update": time.time(),
-            }
-        logger.info(f"Added participant to tracking: {participant.identity}")
-
-    @room.on("participant_disconnected")
-    def on_participant_disconnected(participant: rtc.RemoteParticipant):  # pragma: no cover
-        logger.info(
-            "participant disconnected: %s %s", participant.sid, participant.identity
-        )
-        # Remove participant from our tracking
-        with streamer.participants_lock:
-            if participant.sid in streamer.participants:
-                del streamer.participants[participant.sid]
-                logger.info(
-                    f"Removed participant from tracking: {participant.identity}"
-                )
-        # If the active remote track disconnected, clear active and flush output buffer
-        if streamer.active_remote_participant_id == participant.sid:
             logger.info(
-                "Active remote participant disconnected; releasing playback and clearing buffer"
+                f"Receiving audio from participant: {participant_name} ({participant_id})"
             )
-            streamer.active_remote_participant_id = None
-            with streamer.output_lock:
-                streamer.output_buffer.clear()
 
-    @room.on("connected")
-    def on_connected():  # pragma: no cover
-        logger.info("Successfully connected to LiveKit room")
+            async for frame_event in stream:
+                if not streamer.running:
+                    break
 
-    @room.on("disconnected")
-    def on_disconnected(reason):  # pragma: no cover
-        logger.info(f"Disconnected from LiveKit room: {reason}")
+                frames_received += 1
+                if frames_received <= 5:
+                    logger.info(
+                        f"Received audio frame {frames_received} from {participant_name}"
+                    )
+                elif frames_received % 100 == 0:
+                    logger.info(
+                        f"Received {frames_received} frames total from {participant_name}"
+                    )
 
-    try:
-        # Start audio devices
-        logger.info("Starting audio devices...")
-        streamer.start_audio_devices()
+                # Only process/play audio if this participant is the active remote track
+                if (
+                    streamer.active_remote_participant_id == participant_id
+                    and streamer.remote_playback_enabled
+                ):
+                    # Calculate dB level for this participant
+                    frame_data = frame_event.frame.data
+                    if len(frame_data) > 0:
+                        # Convert to numpy array for dB calculation
+                        audio_samples = np.frombuffer(frame_data, dtype=np.int16)
+                        if len(audio_samples) > 0:
+                            rms = np.sqrt(np.mean(audio_samples.astype(np.float32) ** 2))
+                            max_int16 = np.iinfo(np.int16).max
+                            participant_db = 20.0 * np.log10(rms / max_int16 + 1e-6)
 
-        # Start keyboard handler
-        logger.info("Starting keyboard handler...")
-        streamer.start_keyboard_handler()
+                            # Update participant info
+                            with streamer.participants_lock:
+                                streamer.participants[participant_id] = {
+                                    "name": participant_name,
+                                    "db_level": participant_db,
+                                    "last_update": time.time(),
+                                }
 
-        # Initialize terminal for stable UI
-        streamer.init_terminal()
+                    # Add received audio to output buffer
+                    audio_data = frame_event.frame.data.tobytes()
+                    with streamer.output_lock:
+                        streamer.output_buffer.extend(audio_data)
+
+            logger.info(
+                f"Audio receive task ended for {participant_name}. Total frames received: {frames_received}"
+            )
+
+            # Clean up participant when stream ends
+            with streamer.participants_lock:
+                if participant_id in streamer.participants:
+                    del streamer.participants[participant_id]
+
+        # Event handlers
+        @room.on("track_subscribed")
+        def on_track_subscribed(  # pragma: no cover
+            track: rtc.Track,
+            publication: rtc.RemoteTrackPublication,
+            participant: rtc.RemoteParticipant,
+        ):
+            logger.info(
+                "track subscribed: %s from participant %s (%s)",
+                publication.sid,
+                participant.sid,
+                participant.identity,
+            )
+            if track.kind == rtc.TrackKind.KIND_AUDIO:
+                # Only allow playback for the first subscribed remote audio track
+                if streamer.active_remote_participant_id is None:
+                    streamer.active_remote_participant_id = participant.sid
+                    logger.info(
+                        f"Activating remote playback for first subscribed participant: {participant.identity}"
+                    )
+                    audio_stream = rtc.AudioStream(
+                        track, sample_rate=SAMPLE_RATE, num_channels=NUM_CHANNELS
+                    )
+                    asyncio.ensure_future(receive_audio_frames(audio_stream, participant))
+                else:
+                    logger.info(
+                        f"Ignoring additional remote audio track from {participant.identity}; active playback is participant {streamer.active_remote_participant_id}"
+                    )
 
         # Connect to LiveKit room
-        logger.info("Connecting to LiveKit room...")
-        token = generate_token(ROOM_NAME, participant_name, participant_name)
-        logger.info(f"Generated token for participant: {participant_name}")
-        await room.connect(LIVEKIT_URL, token)
-        logger.info("connected to room %s", room.name)
+        logger.info("Connected!")
 
-        # Publish microphone track
-        logger.info("Publishing microphone track...")
-        track = rtc.LocalAudioTrack.create_audio_track("mic", streamer.source)
-        options = rtc.TrackPublishOptions()
-        options.source = rtc.TrackSource.SOURCE_MICROPHONE
-        publication = await room.local_participant.publish_track(track, options)
-        logger.info("published track %s", publication.sid)
+        @room.on("participant_connected")
+        def on_participant_connected(participant: rtc.RemoteParticipant):  # pragma: no cover
+            logger.info(
+                "participant connected: %s %s", participant.sid, participant.identity
+            )
+            # Initialize participant in our tracking
+            with streamer.participants_lock:
+                streamer.participants[participant.sid] = {
+                    "name": participant.identity or f"User_{participant.sid[:8]}",
+                    "db_level": INPUT_DB_MIN,
+                    "last_update": time.time(),
+                }
+            logger.info(f"Added participant to tracking: {participant.identity}")
 
-        if enable_aec:  # pragma: no cover
-            logger.info("Echo cancellation is enabled")
-        else:
-            logger.info("Echo cancellation is disabled")
+        @room.on("participant_disconnected")
+        def on_participant_disconnected(participant: rtc.RemoteParticipant):  # pragma: no cover
+            logger.info(
+                "participant disconnected: %s %s", participant.sid, participant.identity
+            )
+            # Remove participant from our tracking
+            with streamer.participants_lock:
+                if participant.sid in streamer.participants:
+                    del streamer.participants[participant.sid]
+                    logger.info(
+                        f"Removed participant from tracking: {participant.identity}"
+                    )
+            # If the active remote track disconnected, clear active and flush output buffer
+            if streamer.active_remote_participant_id == participant.sid:
+                logger.info(
+                    "Active remote participant disconnected; releasing playback and clearing buffer"
+                )
+                streamer.active_remote_participant_id = None
+                with streamer.output_lock:
+                    streamer.output_buffer.clear()
+                
+                logger.info("Agent disconnected. Shutting down client session.")
+                streamer.running = False
 
-        # Start background tasks
-        logger.info("Starting background tasks...")
-        audio_task = asyncio.create_task(audio_processing_task())
-        meter_display_task = asyncio.create_task(meter_task())
+        @room.on("connected")
+        def on_connected():  # pragma: no cover
+            logger.info("Successfully connected to LiveKit room")
 
-        logger.info("=== Audio streaming started. Press Ctrl+C to stop. ===")
+        @room.on("disconnected")
+        def on_disconnected(reason):  # pragma: no cover
+            logger.info(f"Disconnected from LiveKit room: {reason}")
 
-        # Keep running until interrupted
         try:
-            while streamer.running:
-                await asyncio.sleep(1)
-        except KeyboardInterrupt:
-            logger.info("Stopping audio streaming...")
+            # Start audio devices
+            logger.info("Starting audio devices...")
+            streamer.start_audio_devices()
 
-    except Exception as e:  # pragma: no cover
-        logger.error(f"Error in main: {e}")
-        import traceback
+            # Start keyboard handler
+            logger.info("Starting keyboard handler...")
+            streamer.start_keyboard_handler()
 
-        logger.error(f"Traceback: {traceback.format_exc()}")
-    finally:
-        # Cleanup
-        logger.info("Starting cleanup...")
-        streamer.running = False
+            # Initialize terminal for stable UI
+            streamer.init_terminal()
 
-        if "audio_task" in locals():
-            audio_task.cancel()
+            # Connect to LiveKit room
+            logger.info("Connecting to LiveKit room...")
+            token = generate_token(ROOM_NAME, participant_name, participant_name)
+            logger.info(f"Generated token for participant: {participant_name}")
+            await room.connect(LIVEKIT_URL, token)
+            logger.info("connected to room %s", room.name)
+
+            # Publish microphone track
+            logger.info("Publishing microphone track...")
+            track = rtc.LocalAudioTrack.create_audio_track("mic", streamer.source)
+            options = rtc.TrackPublishOptions()
+            options.source = rtc.TrackSource.SOURCE_MICROPHONE
+            publication = await room.local_participant.publish_track(track, options)
+            logger.info("published track %s", publication.sid)
+
+            if enable_aec:  # pragma: no cover
+                logger.info("Echo cancellation is enabled")
+            else:
+                logger.info("Echo cancellation is disabled")
+
+            # Start background tasks
+            logger.info("Starting background tasks...")
+            audio_task = asyncio.create_task(audio_processing_task())
+            meter_display_task = asyncio.create_task(meter_task())
+
+            logger.info("=== Audio streaming started. Press Ctrl+C to stop. ===")
+
+            # Keep running until interrupted
             try:
-                await audio_task
-            except asyncio.CancelledError:
-                pass
+                while streamer.running:
+                    await asyncio.sleep(1)
+            except KeyboardInterrupt:
+                logger.info("Stopping audio streaming...")
 
-        if "meter_display_task" in locals():
-            meter_display_task.cancel()
-            try:
-                await meter_display_task
-            except asyncio.CancelledError:
-                pass
+        except Exception as e:  # pragma: no cover
+            logger.error(f"Error in main: {e}")
+            import traceback
 
-        streamer.stop_audio_devices()
-        streamer.stop_keyboard_handler()
-        await room.disconnect()
+            logger.error(f"Traceback: {traceback.format_exc()}")
+        finally:
+            # Cleanup
+            logger.info("Starting cleanup...")
+            streamer.running = False
 
-        # Clear the meter line
-        streamer.restore_terminal()
-        logger.info("=== CLEANUP COMPLETE ===")
+            if "audio_task" in locals():
+                audio_task.cancel()
+                try:
+                    await audio_task
+                except asyncio.CancelledError:
+                    pass
+
+            if "meter_display_task" in locals():
+                meter_display_task.cancel()
+                try:
+                    await meter_display_task
+                except asyncio.CancelledError:
+                    pass
+
+            streamer.stop_audio_devices()
+            streamer.stop_keyboard_handler()
+            await room.disconnect()
+
+            # Clear the meter line
+            streamer.restore_terminal()
+            logger.info("=== CLEANUP COMPLETE ===")
+
+        logger.info("Session ended. Returning to wake word detection in 1 second...")
+        await asyncio.sleep(1)
 
 
 if __name__ == "__main__":
