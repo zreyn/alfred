@@ -1,5 +1,5 @@
-# sir_henry
-This is a fun personal project where I take a Halloween skeleton pirate and have him talk to people when he sees them.
+# alfred
+This is a fun personal project where make a personal home assistant that runs entirely locally (except tools like web searches and API calls)
 
 On an Ubuntu machine with an NVIDIA GPU:
 ```
@@ -45,7 +45,6 @@ docker run --rm --runtime=nvidia nvidia/cuda:12.0.0-base-ubuntu22.04 nvidia-smi
 # Download the big files I didn't want in git:
 ```
 cd agent && uv run python src/download_models.py
-cd f5-tts-service && uv run python src/download_models.py
 ```
 
 # Start/stop all services or view logs using docker compose
@@ -65,29 +64,3 @@ docker compose --env-file .env.user up
 
 For Livekit things, they have a CLI: https://docs.livekit.io/home/cli/
 
-
-For development, you can use a docker-compose.override.yml file to mount the agent code into the voice-agent container for quicker iteration:
-```
-services:
-  voice-agent:
-    volumes:
-      # Mount source code for live editing (overrides copied code in image)
-      - ./agent/src:/app/src:ro
-      # Keep existing mounts from main compose file
-      - ./agent/models:/app/models
-      - ./agent/ref:/app/ref:ro
-    # Use 'start' mode for development (auto-reloads on file changes in dev mode)
-    command: ["uv", "run", "python", "src/main.py", "dev"]
-```
-
-<!-- On the Jetson Orin Nano, there's no `torchcodec` so you have to build it yourself:
-```
-sudo apt-get update
-sudo apt-get install -y libavcodec-dev libavdevice-dev libavfilter-dev \
-    libavformat-dev libavutil-dev libswscale-dev libswresample-dev \
-    pkg-config cmake build-essential
-
-
-uv pip install torch
-uv add "torchcodec @ git+https://github.com/pytorch/torchcodec.git" --no-build-isolation
-``` -->
