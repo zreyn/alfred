@@ -4,6 +4,7 @@ Sir Henry - LiveKit Voice Agent
 A voice AI agent using LiveKit Agents framework with custom F5-TTS and Faster-Whisper plugins.
 """
 
+import asyncio
 import logging
 import time
 
@@ -127,6 +128,11 @@ async def entrypoint(ctx: JobContext):
 
     # Round-trip latency tracking (STT done -> LLM + TTS start)
     _transcription_time: float | None = None
+    timeout_task: asyncio.TimerHandle | None = None
+
+    async def close_session():
+        logger.info("Closing session...")
+        await session.close()
 
     @session.on("user_input_transcribed")
     def on_user_input_transcribed(ev) -> None:
@@ -135,14 +141,30 @@ async def entrypoint(ctx: JobContext):
         transcript = getattr(ev, "transcript", "")
         if transcript:
             logger.info(f"User said: {transcript[:80]}...")
+            lower_transcript = transcript.lower()
+            if any(phrase in lower_transcript for phrase in ["thank you", "thanks", "goodbye", "bye", "cool", "amazing", "okay"]):
+                logger.info("User said a goodbye phrase, closing session.")
+                loop = asyncio.get_running_loop()
+                loop.create_task(close_session())
 
     @session.on("agent_state_changed")
     def on_agent_state_changed(ev) -> None:
-        nonlocal _transcription_time
-        if ev.new_state == "speaking" and _transcription_time is not None:
-            latency_ms = (time.perf_counter() - _transcription_time) * 1000
-            logger.info(f"ROUND-TRIP LATENCY: {latency_ms:.0f}ms (LLM + TTS)")
-            _transcription_time = None
+        nonlocal _transcription_time, timeout_task
+        loop = asyncio.get_running_loop()
+
+        if ev.new_state == "speaking":
+            if _transcription_time is not None:
+                latency_ms = (time.perf_counter() - _transcription_time) * 1000
+                logger.info(f"ROUND-TRIP LATENCY: {latency_ms:.0f}ms (LLM + TTS)")
+                _transcription_time = None
+        
+        if timeout_task:
+            timeout_task.cancel()
+            timeout_task = None
+
+        if ev.new_state == "listening":
+            timeout_task = loop.call_later(10, lambda: loop.create_task(close_session()))
+
 
     # Start the session with our agent
     await session.start(
