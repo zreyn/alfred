@@ -1,0 +1,54 @@
+[project]
+name = "f5-tts-service"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Zane Reynolds", email = "zane.reynolds@gmail.com"}
+]
+requires-python = ">=3.12,<4.0"
+dependencies = [
+    "torch>=2.6.0",
+    "numpy>=2.3.4",
+    "requests>=2.31.0",
+    "f5-tts>=1.1.10",
+    "python-dotenv>=1.0.0",
+    "fastapi>=0.115.0",
+    "uvicorn>=0.34.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "black>=25.1.0",
+    "pytest>=8.3.4",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+
+[tool.coverage.run]
+branch = false
+source = ["src"]
+
+[tool.coverage.paths]
+source = ["src"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 100
+exclude_lines = [
+    "# pragma: no cover",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]
+omit = [
+]
+
