@@ -190,6 +190,10 @@ class AudioStreamer:
         self.active_remote_participant_id: str | None = None
         self.remote_playback_enabled = True
 
+        # Silence/activity detection
+        self.last_local_speech_time = time.time()
+        self.last_remote_audio_time = time.time()
+
     def start_audio_devices(self):
         """Initialize and start audio input/output devices"""
         try:
@@ -436,6 +440,10 @@ class AudioStreamer:
             rms = np.sqrt(np.mean(original_chunk.astype(np.float32) ** 2))
             max_int16 = np.iinfo(np.int16).max
             self.micro_db = 20.0 * np.log10(rms / max_int16 + 1e-6)
+
+            # Update last speech time if above threshold
+            if self.micro_db > -50.0:
+                self.last_local_speech_time = time.time()
 
             # Send to LiveKit using the stored event loop reference
             if self.loop and not self.loop.is_closed():
@@ -695,6 +703,26 @@ async def main(participant_name: str, enable_aec: bool = True):
 
             logger.info(f"Audio processing task ended. Total frames sent: {frames_sent}")
 
+        # Session management task for silence/inactivity
+        async def session_management_task():  # pragma: no cover
+            """Check for user silence or agent inactivity"""
+            logger.info("Session management task started")
+            while streamer.running:
+                await asyncio.sleep(1)
+                
+                # User silence timeout
+                if time.time() - streamer.last_local_speech_time > 10.0:
+                    logger.info("User has been silent for 10 seconds, closing session.")
+                    streamer.running = False
+                    break
+                
+                # Agent inactivity timeout
+                if time.time() - streamer.last_remote_audio_time > 20.0:
+                    logger.info("No audio from agent for 20 seconds, closing session.")
+                    streamer.running = False
+                    break
+            logger.info("Session management task ended.")
+
         # Meter display task
         async def meter_task():  # pragma: no cover
             """Display audio level meter"""
@@ -722,6 +750,9 @@ async def main(participant_name: str, enable_aec: bool = True):
             async for frame_event in stream:
                 if not streamer.running:
                     break
+
+                # Update remote audio timestamp
+                streamer.last_remote_audio_time = time.time()
 
                 frames_received += 1
                 if frames_received <= 5:
@@ -840,6 +871,17 @@ async def main(participant_name: str, enable_aec: bool = True):
                 logger.info("Agent disconnected. Shutting down client session.")
                 streamer.running = False
 
+        @room.on("data_received")
+        def on_data_received(data: bytes, participant: rtc.RemoteParticipant):  # pragma: no cover
+            """Handle data messages from the agent for session control"""
+            message = data.decode("utf-8").lower()
+            logger.info(f"Received data from {participant.identity}: {message}")
+            
+            # Check for session closing keywords from the agent
+            if any(keyword in message for keyword in ["bye", "goodbye", "thanks"]):
+                logger.info(f"'{message}' detected from agent. Closing session.")
+                streamer.running = False
+
         @room.on("connected")
         def on_connected():  # pragma: no cover
             logger.info("Successfully connected to LiveKit room")
@@ -884,6 +926,7 @@ async def main(participant_name: str, enable_aec: bool = True):
             logger.info("Starting background tasks...")
             audio_task = asyncio.create_task(audio_processing_task())
             meter_display_task = asyncio.create_task(meter_task())
+            session_task = asyncio.create_task(session_management_task())
 
             logger.info("=== Audio streaming started. Press Ctrl+C to stop. ===")
 
@@ -915,6 +958,13 @@ async def main(participant_name: str, enable_aec: bool = True):
                 meter_display_task.cancel()
                 try:
                     await meter_display_task
+                except asyncio.CancelledError:
+                    pass
+            
+            if "session_task" in locals():
+                session_task.cancel()
+                try:
+                    await session_task
                 except asyncio.CancelledError:
                     pass
 
