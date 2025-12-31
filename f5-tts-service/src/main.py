@@ -36,11 +36,16 @@ logging.getLogger("uvicorn.access").addFilter(HealthCheckFilter())
 F5_MODEL_PATH = "./models/f5-tts/F5TTS_v1_Base/model_88500.safetensors"
 F5_VOCAB_PATH = "./models/f5-tts/F5TTS_v1_Base/vocab.txt"
 VOCOS_PATH = "./models/vocos-mel-24khz"
+REF_AUDIO_PATH = "./ref/sirhenry-reference.wav"
+with open("./ref/sirhenry-reference.txt", "r") as f:
+    REF_TEXT = f.read()
 
 # Global model state
 state = {
     "model": None,
     "vocoder": None,
+    "ref_audio": None,
+    "ref_text_proc": None,
     "device": "cuda" if torch.cuda.is_available() else "cpu",
 }
 
@@ -65,6 +70,12 @@ async def lifespan(app: FastAPI):
         use_ema=True,
         device=state["device"],
     )
+
+    logger.info("Pre-processing reference audio...")
+    state["ref_audio"], state["ref_text_proc"] = preprocess_ref_audio_text(
+        REF_AUDIO_PATH, REF_TEXT
+    )
+
     logger.info("F5-TTS Ready!")
     yield
 
@@ -74,8 +85,6 @@ app = FastAPI(lifespan=lifespan)
 
 class SynthesisRequest(BaseModel):
     text: str
-    ref_audio_path: str
-    ref_text: str
     speed: float = 1.0
 
 
@@ -86,16 +95,11 @@ async def synthesize(req: SynthesisRequest):
     if not req.text.strip():
         return Response(content=b"", media_type="audio/pcm")
 
-    # Load Ref Audio (Ideally cache this too if reusing the same voice)
-    ref_audio, ref_text_proc = preprocess_ref_audio_text(
-        req.ref_audio_path, req.ref_text
-    )
-
     try:
         # Run Inference
         audio, sample_rate, _ = infer_process(
-            ref_audio,
-            ref_text_proc,
+            state["ref_audio"],
+            state["ref_text_proc"],
             req.text,
             state["model"],
             state["vocoder"],
