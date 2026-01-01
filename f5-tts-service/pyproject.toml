@@ -1,5 +1,5 @@
 [project]
-name = "agent"
+name = "f5-tts-service"
 version = "0.1.0"
 description = ""
 authors = [
@@ -7,19 +7,13 @@ authors = [
 ]
 requires-python = ">=3.12,<4.0"
 dependencies = [
+    "torch>=2.6.0",
     "numpy>=2.3.4",
-    "faster-whisper>=1.2.1",
     "requests>=2.31.0",
-    "piper-tts>=1.2.0",
-    "livekit==1.0.20",
-    "livekit-agents>=1.0.0",
-    "livekit-plugins-openai>=1.0.0",
-    "livekit-plugins-silero>=1.0.0",
+    "f5-tts>=1.1.10",
     "python-dotenv>=1.0.0",
-    "torch>=2.9.1",
-    "torchaudio>=2.9.1",
-    "uvicorn",
-    "fastapi",
+    "fastapi>=0.115.0",
+    "uvicorn>=0.34.0",
 ]
 
 [project.optional-dependencies]

@@ -26,7 +26,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Make python3.12 the default python
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.12 1
 
-
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 

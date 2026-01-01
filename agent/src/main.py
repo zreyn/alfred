@@ -18,16 +18,12 @@ from config import (
     logger,
     SYSTEM_PROMPT,
     GREETING,
+    TTS_SPEED,
+    TTS_HOST,
     STT_DEVICE,
     OLLAMA_HOST,
     OLLAMA_MODEL,
     OLLAMA_TEMPERATURE,
-    PIPER_MODEL_PATH,
-    PIPER_USE_CUDA,
-    PIPER_SPEED,
-    PIPER_VOLUME,
-    PIPER_NOISE_SCALE,
-    PIPER_NOISE_W,
 )
 
 
@@ -45,6 +41,7 @@ class VoiceAgent(Agent):
         """Called when the agent enters a session."""
         logger.info(f"Speaking greeting: '{GREETING}'")
         await self.session.say(GREETING)
+        logger.info("Greeting complete")
 
 
 def prewarm(proc: JobProcess):
@@ -53,23 +50,19 @@ def prewarm(proc: JobProcess):
     This reduces latency when the first user connects.
     """
     # Import heavy plugins here to avoid multiprocessing spawn issues
-    from plugins import FasterWhisperSTT, PiperTTS
+    from plugins import F5TTS, FasterWhisperSTT
 
     logger.info("Prewarming models...")
 
     proc.userdata["vad"] = silero.VAD.load()
     logger.info("Silero VAD loaded.")
 
-    proc.userdata["tts"] = PiperTTS(
-        model_path=PIPER_MODEL_PATH,
-        use_cuda=PIPER_USE_CUDA,
-        speed=PIPER_SPEED,
-        volume=PIPER_VOLUME,
-        noise_scale=PIPER_NOISE_SCALE,
-        noise_w=PIPER_NOISE_W,
+    # Load TTS
+    proc.userdata["tts"] = F5TTS(
+        speed=TTS_SPEED,
+        service_url=TTS_HOST,
     )
-    logger.info("Piper TTS initialized.")
-   
+    logger.info("F5-TTS initialized.")
 
     proc.userdata["stt"] = FasterWhisperSTT(
         model_path="./models/faster-whisper-small",
@@ -132,9 +125,7 @@ async def entrypoint(ctx: JobContext):
     def on_user_input_transcribed(ev) -> None:
         nonlocal _transcription_time
         _transcription_time = time.perf_counter()
-        transcript = getattr(ev, "transcript", "")
-        if transcript:
-            logger.info(f"User said: {transcript[:80]}...")
+        logger.info(f"User said: {transcript}")
 
     @session.on("agent_state_changed")
     def on_agent_state_changed(ev) -> None:
@@ -150,7 +141,23 @@ async def entrypoint(ctx: JobContext):
         room=ctx.room,
     )
 
+    # Create event to wait for session close
+    close_event = asyncio.Event()
+
+    @session.on("close")
+    def on_session_close(ev) -> None:
+        logger.info(f"Session closed: {ev.reason}")
+        close_event.set()
+
     logger.info("Agent session started.")
+
+    try:
+        # Wait until session closes (room disconnects, etc.)
+        await close_event.wait()
+
+    finally:
+        # Unregister session on cleanup
+        session_registry.unregister(ctx.room.name)
 
 
 def main():

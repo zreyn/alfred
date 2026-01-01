@@ -38,11 +38,36 @@ services:
       - |
         echo "Waiting for Ollama to be ready..."
         sleep 5
-        echo "Pulling deepseek-r1:8b model..."
-        curl -X POST http://localhost:11434/api/pull -d '{"name": "deepseek-r1:8b"}'
+        echo "Pulling qwen3:8b model..."
+        curl -X POST http://localhost:11434/api/pull -d '{"name": "qwen3:8b"}'
         echo "Model pulled. Keeping it loaded..."
-        curl -X POST http://localhost:11434/api/generate -d '{"model": "deepseek-r1:8b", "prompt": "test", "keep_alive": -1}'
+        curl -X POST http://localhost:11434/api/generate -d '{"model": "qwen3:8b", "prompt": "test", "keep_alive": -1}'
         echo "Init complete"
+
+  f5-tts-service:
+    build:
+      context: .
+      dockerfile: f5-tts-service/Dockerfile
+    container_name: f5-tts-service
+    restart: unless-stopped
+    environment:
+      - CHARACTER=${CHARACTER:-sir_henry}
+    ports:
+      - "11800:11800"
+    volumes:
+      # Mount reference audio files
+      - ./f5-tts-service/ref:/app/ref:ro 
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11800/health"]
+      interval: 10s
+      start_period: 60s
 
   livekit-server:
     image: livekit/livekit-server:latest
@@ -63,12 +88,14 @@ services:
     depends_on:
       ollama:
         condition: service_healthy
+      f5-tts-service:
+        condition: service_healthy
       livekit-server:
         condition: service_started
     environment:
       - STT_DEVICE=${STT_DEVICE:-cuda}
       - OLLAMA_HOST=localhost:11434
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-deepseek-r1:8b}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen3:8b}
       - LIVEKIT_URL=ws://localhost:7880
       - LIVEKIT_API_KEY=devkey
       - LIVEKIT_API_SECRET=secret

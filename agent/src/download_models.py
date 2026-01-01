@@ -8,7 +8,6 @@ copied into Docker images. No downloads should happen at container startup.
 Models downloaded:
 - Faster-Whisper "small" model (for STT)
 - Silero VAD model (for voice activity detection)
-- Piper TTS voice model (for local TTS)
 
 Usage:
     python download_models.py
@@ -79,34 +78,6 @@ def download_silero_vad_model() -> Path:
     return silero_dir
 
 
-def download_piper_model(model_name: str = "en_US-ryan-high") -> Path:
-    """Download Piper TTS voice model from HuggingFace."""
-    from huggingface_hub import hf_hub_download
-
-    print(f"Downloading Piper voice model '{model_name}'...")
-
-    piper_dir = MODELS_DIR / "piper"
-    piper_dir.mkdir(parents=True, exist_ok=True)
-
-    # Download model and config files
-    onnx_file = hf_hub_download(
-        repo_id="rhasspy/piper-voices",
-        filename=f"en/en_US/ryan/high/{model_name}.onnx",
-        local_dir=str(piper_dir),
-        local_dir_use_symlinks=False,
-    )
-
-    config_file = hf_hub_download(
-        repo_id="rhasspy/piper-voices",
-        filename=f"en/en_US/ryan/high/{model_name}.onnx.json",
-        local_dir=str(piper_dir),
-        local_dir_use_symlinks=False,
-    )
-
-    print(f"  Downloaded to: {piper_dir}")
-    return piper_dir
-
-
 def main():
     """Download all models."""
     print("=" * 60)
@@ -123,9 +94,6 @@ def main():
     print()
 
     download_silero_vad_model()
-    print()
-
-    download_piper_model("en_US-ryan-high")
     print()
 
     print("=" * 60)
