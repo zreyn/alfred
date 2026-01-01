@@ -33,7 +33,7 @@ def download_f5_tts_model() -> Path:
 
     # F5-TTS model checkpoint is managed by Git LFS.
     # This script assumes the file is already present.
-    ckpt_file = f5_dir / "F5TTS_v1_Base" / "model_88500.safetensors"
+    ckpt_file = f5_dir / "F5TTS_v1_Base" / "model_48000.safetensors"
     if not ckpt_file.is_file():
         raise RuntimeError(
             f"Model checkpoint not found: {ckpt_file}. "

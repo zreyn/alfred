@@ -33,11 +33,11 @@ class HealthCheckFilter(logging.Filter):
 logging.getLogger("uvicorn.access").addFilter(HealthCheckFilter())
 
 # Model paths (pre-downloaded, no network access needed)
-F5_MODEL_PATH = "./models/f5-tts/F5TTS_v1_Base/model_88500.safetensors"
+F5_MODEL_PATH = "./models/f5-tts/F5TTS_v1_Base/model_48000.safetensors"
 F5_VOCAB_PATH = "./models/f5-tts/F5TTS_v1_Base/vocab.txt"
 VOCOS_PATH = "./models/vocos-mel-24khz"
-REF_AUDIO_PATH = "./ref/sirhenry-reference.wav"
-with open("./ref/sirhenry-reference.txt", "r") as f:
+REF_AUDIO_PATH = "./ref/alfred-reference.wav"
+with open("./ref/alfred-reference.txt", "r") as f:
     REF_TEXT = f.read()
 
 # Global model state
