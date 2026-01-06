@@ -69,6 +69,38 @@ services:
       interval: 10s
       start_period: 60s
 
+  health-service:
+    build:
+      context: .
+      dockerfile: health-service/Dockerfile
+    container_name: health-service
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      # Mount host /proc and /sys for accurate host metrics
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host/root:ro
+    environment:
+      # Tell psutil to use host proc/sys
+      - PROC_PATH=/host/proc
+      - SYS_PATH=/host/sys
+      - HOST_ROOT=/host/root
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
   livekit-server:
     image: livekit/livekit-server:latest
     container_name: livekit-server
