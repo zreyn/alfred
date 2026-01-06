@@ -73,7 +73,7 @@ def get_gpu_status() -> dict[str, Any]:
         result = subprocess.run(
             [
                 "nvidia-smi",
-                "--query-gpu=name,memory.total,memory.used,memory.free,utilization.gpu,temperature.gpu",
+                "--query-gpu=name,memory.total,memory.used,memory.free,utilization.gpu,utilization.memory,temperature.gpu",
                 "--format=csv,noheader,nounits",
             ],
             capture_output=True,
@@ -89,15 +89,28 @@ def get_gpu_status() -> dict[str, Any]:
             if not line:
                 continue
             parts = [p.strip() for p in line.split(",")]
-            if len(parts) >= 6:
+            if len(parts) >= 7:
+                memory_total = int(parts[1])
+                memory_used = int(parts[2])
+                memory_util_percent = round(memory_used / memory_total * 100, 1) if memory_total > 0 else 0
+                compute_util = int(parts[4])
+                memory_bandwidth_util = int(parts[5])
+
+                # Use memory bandwidth utilization as a better indicator of GPU activity
+                # Falls back to compute utilization if memory bandwidth is 0
+                utilization = memory_bandwidth_util if memory_bandwidth_util > 0 else compute_util
+
                 gpus.append(
                     {
                         "name": parts[0],
-                        "memory_total_mb": int(parts[1]),
-                        "memory_used_mb": int(parts[2]),
+                        "memory_total_mb": memory_total,
+                        "memory_used_mb": memory_used,
                         "memory_free_mb": int(parts[3]),
-                        "utilization_percent": int(parts[4]),
-                        "temperature_c": int(parts[5]),
+                        "memory_utilization_percent": memory_util_percent,
+                        "utilization_percent": utilization,
+                        "compute_utilization_percent": compute_util,
+                        "memory_bandwidth_utilization_percent": memory_bandwidth_util,
+                        "temperature_c": int(parts[6]),
                     }
                 )
 

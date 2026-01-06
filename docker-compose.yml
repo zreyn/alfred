@@ -151,21 +151,17 @@ services:
       retries: 5
       start_period: 60s  # Allow time for model loading
 
-  open-webui:
-    image: ghcr.io/open-webui/open-webui:main
-    container_name: open-webui
-    network_mode: host  # Use host network to reach ollama
+  homepage:
+    image: ghcr.io/gethomepage/homepage:latest
+    container_name: homepage
+    network_mode: host
     environment:
-      PORT: 3000
-      OLLAMA_BASE_URL: http://localhost:11434
+      - HOMEPAGE_ALLOWED_HOSTS=${LIVEKIT_NODE_IP}:3000,localhost:3000
+      - HOMEPAGE_HOST=${HOMEPAGE_HOST:-localhost}
     volumes:
-      - webui_data:/app/backend/data
-    depends_on:
-      ollama:
-        condition: service_healthy
-      ollama-init:
-        condition: service_completed_successfully
-    restart: always
+      - ./homepage/config:/app/config
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
 
   n8n:
     image: docker.n8n.io/n8nio/n8n
@@ -177,13 +173,11 @@ services:
     ports:
       - "5678:5678"
     volumes:
-      - n8n_data:/home/node/.n8n 
+      - n8n_data:/home/node/.n8n
     restart: always
 
 volumes:
   ollama_data:
-    driver: local
-  webui_data:
     driver: local
   n8n_data:
     driver: local

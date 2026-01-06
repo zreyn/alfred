@@ -1,0 +1,20 @@
+---
+# Homepage settings
+# Documentation: https://gethomepage.dev/configs/settings/
+
+title: Alfred Dashboard
+
+background:
+  image: ""
+  blur: sm
+  opacity: 50
+
+theme: dark
+color: slate
+
+headerStyle: clean
+
+layout:
+  Services:
+    style: row
+    columns: 3

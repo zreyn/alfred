@@ -1,0 +1,44 @@
+---
+# Homepage services configuration
+# Documentation: https://gethomepage.dev/configs/services/
+
+- Services:
+    - Ollama:
+        href: http://localhost:11434
+        description: Local LLM server
+        icon: ollama.png
+    - n8n:
+        href: http://localhost:5678
+        description: Workflow automation
+        icon: n8n.png
+    - LiveKit:
+        href: http://localhost:7880
+        description: WebRTC server
+    - F5-TTS:
+        href: http://localhost:11800
+        description: Text-to-speech service
+
+- System:
+    - Health:
+        href: http://localhost:8080
+        description: System health monitoring
+        widget:
+          type: customapi
+          url: http://localhost:8080/status
+          refreshInterval: 5000
+          mappings:
+            - field: cpu.usage_percent
+              label: CPU
+              format: percent
+            - field: ram.usage_percent
+              label: RAM
+              format: percent
+            - field: disk.usage_percent
+              label: Disk
+              format: percent
+            - field: gpu.gpus.0.utilization_percent
+              label: GPU
+              format: percent
+            - field: gpu.gpus.0.memory_utilization_percent
+              label: VRAM
+              format: percent
