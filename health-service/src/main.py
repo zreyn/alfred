@@ -1,15 +1,20 @@
 """
 Health Status API for Homepage Dashboard
 
-A FastAPI service providing system health metrics including CPU, RAM, disk, and GPU status.
+A FastAPI service providing system health metrics including CPU, RAM, disk, GPU,
+Docker container, and LiveKit status.
 """
 
 import os
 import shutil
 import subprocess
+import time
 from contextlib import asynccontextmanager
 from typing import Any
 
+import docker
+import httpx
+import jwt
 import psutil
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,6 +22,14 @@ from fastapi.middleware.cors import CORSMiddleware
 # Configure psutil to use host paths when running in Docker
 PROC_PATH = os.environ.get("PROC_PATH", "/proc")
 HOST_ROOT = os.environ.get("HOST_ROOT", "/host/root")
+
+# LiveKit configuration
+LIVEKIT_API_KEY = os.environ.get("LIVEKIT_API_KEY", "devkey")
+LIVEKIT_API_SECRET = os.environ.get("LIVEKIT_API_SECRET", "secret")
+LIVEKIT_URL = os.environ.get("LIVEKIT_URL", "http://localhost:7880")
+
+# Docker compose project name for filtering containers
+COMPOSE_PROJECT = os.environ.get("COMPOSE_PROJECT", "alfred")
 
 # Set psutil's PROCFS_PATH for host metrics
 if PROC_PATH != "/proc":
@@ -122,6 +135,100 @@ def get_gpu_status() -> dict[str, Any]:
         return {"available": False, "error": str(e)}
 
 
+def get_container_status() -> dict[str, Any]:
+    """Get Docker container status for Alfred project containers."""
+    try:
+        client = docker.from_env()
+        # Filter containers by compose project label
+        containers = client.containers.list(
+            all=True,
+            filters={"label": f"com.docker.compose.project={COMPOSE_PROJECT}"},
+        )
+
+        container_list = []
+        running_count = 0
+        unhealthy_count = 0
+
+        for container in containers:
+            status = container.status
+            health = None
+
+            # Get health status if available
+            if container.attrs.get("State", {}).get("Health"):
+                health = container.attrs["State"]["Health"].get("Status")
+
+            if status == "running":
+                running_count += 1
+            if health == "unhealthy":
+                unhealthy_count += 1
+
+            container_list.append(
+                {
+                    "name": container.name,
+                    "status": status,
+                    "health": health,
+                }
+            )
+
+        # Sort by name for consistent ordering
+        container_list.sort(key=lambda x: x["name"])
+
+        return {
+            "total": len(containers),
+            "running": running_count,
+            "unhealthy": unhealthy_count,
+            "containers": container_list,
+        }
+
+    except Exception as e:
+        return {"error": str(e), "total": 0, "running": 0, "unhealthy": 0, "containers": []}
+
+
+def get_livekit_status() -> dict[str, Any]:
+    """Get LiveKit server status via API."""
+    try:
+        # Generate a JWT token for LiveKit API access
+        now = int(time.time())
+        claims = {
+            "iss": LIVEKIT_API_KEY,
+            "sub": LIVEKIT_API_KEY,
+            "nbf": now,
+            "exp": now + 300,  # 5 minute expiry
+            "video": {"roomList": True},
+        }
+        token = jwt.encode(claims, LIVEKIT_API_SECRET, algorithm="HS256")
+
+        # Call LiveKit's ListRooms API
+        with httpx.Client(timeout=5.0) as client:
+            response = client.post(
+                f"{LIVEKIT_URL}/twirp/livekit.RoomService/ListRooms",
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json",
+                },
+                json={},
+            )
+
+        if response.status_code != 200:
+            return {"available": False, "error": f"HTTP {response.status_code}"}
+
+        data = response.json()
+        rooms = data.get("rooms", [])
+
+        total_participants = sum(room.get("numParticipants", 0) for room in rooms)
+
+        return {
+            "available": True,
+            "rooms": len(rooms),
+            "participants": total_participants,
+        }
+
+    except httpx.ConnectError:
+        return {"available": False, "error": "Cannot connect to LiveKit"}
+    except Exception as e:
+        return {"available": False, "error": str(e)}
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
@@ -189,3 +296,15 @@ async def disk_status() -> dict[str, Any]:
 async def gpu_status() -> dict[str, Any]:
     """Get GPU status only."""
     return get_gpu_status()
+
+
+@app.get("/status/containers")
+async def containers_status() -> dict[str, Any]:
+    """Get Docker container status for Alfred project."""
+    return get_container_status()
+
+
+@app.get("/status/livekit")
+async def livekit_status() -> dict[str, Any]:
+    """Get LiveKit server status."""
+    return get_livekit_status()

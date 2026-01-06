@@ -7,6 +7,14 @@
         href: http://local-ollama:11434
         description: Local LLM server
         icon: ollama.png
+        widget:
+          type: customapi
+          url: http://local-ollama:11434/api/ps
+          refreshInterval: 10000
+          mappings:
+            - field: models.0.name
+              label: Model
+              format: text
     - n8n:
         href: http://n8n:5678
         description: Workflow automation
@@ -14,9 +22,32 @@
     - LiveKit:
         href: http://localhost:7880
         description: WebRTC server (host network)
+        widget:
+          type: customapi
+          url: http://health-service:8080/status/livekit
+          refreshInterval: 5000
+          mappings:
+            - field: rooms
+              label: Rooms
+              format: number
+            - field: participants
+              label: Participants
+              format: number
     - F5-TTS:
         href: http://f5-tts-service:11800
         description: Text-to-speech service
+        widget:
+          type: customapi
+          url: http://f5-tts-service:11800/metrics
+          refreshInterval: 5000
+          mappings:
+            - field: total_requests
+              label: Requests
+              format: number
+            - field: average_latency_ms
+              label: Avg Latency
+              format: text
+              suffix: ms
 
 - System:
     - Health:
@@ -35,4 +66,21 @@
               format: percent
             - field: gpu.gpus.0.temperature_c
               label: GPU Temp
+              format: number
+    - Containers:
+        href: http://health-service:8080
+        description: Docker container status
+        widget:
+          type: customapi
+          url: http://health-service:8080/status/containers
+          refreshInterval: 10000
+          mappings:
+            - field: running
+              label: Running
+              format: number
+            - field: total
+              label: Total
+              format: number
+            - field: unhealthy
+              label: Unhealthy
               format: number

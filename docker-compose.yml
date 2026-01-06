@@ -89,11 +89,17 @@ services:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /:/host/root:ro
+      # Docker socket for container health monitoring
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
       # Tell psutil to use host proc/sys
       - PROC_PATH=/host/proc
       - SYS_PATH=/host/sys
       - HOST_ROOT=/host/root
+      # LiveKit API credentials for stats endpoint
+      - LIVEKIT_API_KEY=devkey
+      - LIVEKIT_API_SECRET=secret
+      - LIVEKIT_URL=http://${LIVEKIT_NODE_IP}:7880
     deploy:
       resources:
         reservations:
