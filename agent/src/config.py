@@ -33,7 +33,7 @@ STT_DEVICE = os.environ.get("STT_DEVICE", "cpu").lower()
 
 # Ollama Configuration
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "localhost:11434")
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen3:8b")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "mistral:7b")
 OLLAMA_TEMPERATURE = float(os.environ.get("OLLAMA_TEMPERATURE", "0.8"))
 
 # TTS config

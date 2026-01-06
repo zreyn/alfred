@@ -4,27 +4,27 @@
 
 - Services:
     - Ollama:
-        href: http://localhost:11434
+        href: http://local-ollama:11434
         description: Local LLM server
         icon: ollama.png
     - n8n:
-        href: http://localhost:5678
+        href: http://n8n:5678
         description: Workflow automation
         icon: n8n.png
     - LiveKit:
         href: http://localhost:7880
-        description: WebRTC server
+        description: WebRTC server (host network)
     - F5-TTS:
-        href: http://localhost:11800
+        href: http://f5-tts-service:11800
         description: Text-to-speech service
 
 - System:
     - Health:
-        href: http://localhost:8080
+        href: http://health-service:8080
         description: System health monitoring
         widget:
           type: customapi
-          url: http://localhost:8080/status
+          url: http://health-service:8080/status
           refreshInterval: 5000
           mappings:
             - field: cpu.usage_percent
@@ -42,3 +42,6 @@
             - field: gpu.gpus.0.memory_utilization_percent
               label: VRAM
               format: percent
+            - field: gpu.gpus.0.temperature_c
+              label: GPU Temp
+              format: number
