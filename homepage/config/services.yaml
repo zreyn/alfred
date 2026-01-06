@@ -21,21 +21,12 @@
 - System:
     - Health:
         href: http://health-service:8080
-        description: System health monitoring
+        description: GPU health monitoring
         widget:
           type: customapi
           url: http://health-service:8080/status
           refreshInterval: 5000
           mappings:
-            - field: cpu.usage_percent
-              label: CPU
-              format: percent
-            - field: ram.usage_percent
-              label: RAM
-              format: percent
-            - field: disk.usage_percent
-              label: Disk
-              format: percent
             - field: gpu.gpus.0.utilization_percent
               label: GPU
               format: percent
