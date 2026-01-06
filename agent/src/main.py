@@ -125,6 +125,7 @@ async def entrypoint(ctx: JobContext):
     def on_user_input_transcribed(ev) -> None:
         nonlocal _transcription_time
         _transcription_time = time.perf_counter()
+        transcript = getattr(ev, "transcript", "")
         logger.info(f"User said: {transcript}")
 
     @session.on("agent_state_changed")

@@ -167,9 +167,23 @@ services:
         condition: service_completed_successfully
     restart: always
 
+  n8n:
+    image: docker.n8n.io/n8nio/n8n
+    container_name: n8n
+    network_mode: host
+    environment:
+      N8N_PORT: 5678
+      N8N_HOST: 0.0.0.0
+    ports:
+      - "5678:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n 
+    restart: always
 
 volumes:
   ollama_data:
     driver: local
   webui_data:
+    driver: local
+  n8n_data:
     driver: local
