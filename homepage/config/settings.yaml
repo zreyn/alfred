@@ -5,7 +5,7 @@
 title: Alfred Dashboard
 
 background:
-  image: ""
+  image: /images/background-1.jpg
   blur: sm
   opacity: 50
 
