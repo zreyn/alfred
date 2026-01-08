@@ -49,6 +49,16 @@ state = {
     "device": "cuda" if torch.cuda.is_available() else "cpu",
 }
 
+# Metrics tracking
+metrics = {
+    "start_time": time.time(),
+    "total_requests": 0,
+    "successful_requests": 0,
+    "failed_requests": 0,
+    "total_audio_seconds": 0.0,
+    "total_latency_ms": 0.0,
+}
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -91,8 +101,10 @@ class SynthesisRequest(BaseModel):
 @app.post("/synthesize")
 async def synthesize(req: SynthesisRequest):
     _synthesis_start_time = time.perf_counter()
+    metrics["total_requests"] += 1
 
     if not req.text.strip():
+        metrics["successful_requests"] += 1
         return Response(content=b"", media_type="audio/pcm")
 
     try:
@@ -116,13 +128,37 @@ async def synthesize(req: SynthesisRequest):
         latency_ms = (time.perf_counter() - _synthesis_start_time) * 1000
         logger.info(f"Synthesis time: {latency_ms:.0f}ms")
 
+        # Update metrics
+        audio_duration_seconds = len(audio) / sample_rate
+        metrics["successful_requests"] += 1
+        metrics["total_audio_seconds"] += audio_duration_seconds
+        metrics["total_latency_ms"] += latency_ms
+
         return Response(content=audio_int16.tobytes(), media_type="audio/pcm")
 
     except Exception as e:
         logger.error(f"Synthesis failed: {e}")
+        metrics["failed_requests"] += 1
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/health")
 def health():
     return {"status": "ok", "device": state["device"]}
+
+
+@app.get("/metrics")
+def get_metrics():
+    """Return service metrics for monitoring."""
+    successful = metrics["successful_requests"]
+    avg_latency = (
+        metrics["total_latency_ms"] / successful if successful > 0 else 0.0
+    )
+    return {
+        "total_requests": metrics["total_requests"],
+        "successful_requests": successful,
+        "failed_requests": metrics["failed_requests"],
+        "total_audio_seconds": round(metrics["total_audio_seconds"], 1),
+        "average_latency_ms": round(avg_latency, 1),
+        "uptime_seconds": round(time.time() - metrics["start_time"]),
+    }
