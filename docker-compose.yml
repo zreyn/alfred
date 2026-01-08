@@ -7,6 +7,8 @@ services:
       - OLLAMA_HOST=0.0.0.0:11434
     ports:
       - "0.0.0.0:11434:11434" # 11434:11434 alone leaves it open just to the docker network
+    networks:
+      - alfred-network
     volumes:
       - ollama_data:/root/.ollama
     deploy:
@@ -28,7 +30,8 @@ services:
   ollama-init:
     image: curlimages/curl:latest
     container_name: local-ollama_init
-    network_mode: host  # Use host network to reach ollama
+    networks:
+      - alfred-network
     depends_on:
       ollama:
         condition: service_healthy
@@ -38,10 +41,10 @@ services:
       - |
         echo "Waiting for Ollama to be ready..."
         sleep 5
-        echo "Pulling qwen3:8b model..."
-        curl -X POST http://localhost:11434/api/pull -d '{"name": "qwen3:8b"}'
+        echo "Pulling mistral:7b model..."
+        curl -X POST http://local-ollama:11434/api/pull -d '{"name": "mistral:7b"}'
         echo "Model pulled. Keeping it loaded..."
-        curl -X POST http://localhost:11434/api/generate -d '{"model": "qwen3:8b", "prompt": "test", "keep_alive": -1}'
+        curl -X POST http://local-ollama:11434/api/generate -d '{"model": "mistral:7b", "prompt": "test", "keep_alive": -1}'
         echo "Init complete"
 
   f5-tts-service:
@@ -52,6 +55,8 @@ services:
     restart: unless-stopped
     environment:
       - CHARACTER=${CHARACTER:-sir_henry}
+    networks:
+      - alfred-network
     ports:
       - "11800:11800"
     volumes:
@@ -69,6 +74,46 @@ services:
       interval: 10s
       start_period: 60s
 
+  health-service:
+    build:
+      context: .
+      dockerfile: health-service/Dockerfile
+    container_name: health-service
+    restart: unless-stopped
+    networks:
+      - alfred-network
+    ports:
+      - "8080:8080"
+    volumes:
+      # Mount host /proc and /sys for accurate host metrics
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host/root:ro
+      # Docker socket for container health monitoring
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      # Tell psutil to use host proc/sys
+      - PROC_PATH=/host/proc
+      - SYS_PATH=/host/sys
+      - HOST_ROOT=/host/root
+      # LiveKit API credentials for stats endpoint
+      - LIVEKIT_API_KEY=devkey
+      - LIVEKIT_API_SECRET=secret
+      - LIVEKIT_URL=http://${LIVEKIT_NODE_IP}:7880
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
   livekit-server:
     image: livekit/livekit-server:latest
     container_name: livekit-server
@@ -84,7 +129,7 @@ services:
       context: .
       dockerfile: agent/Dockerfile
     container_name: voice-agent
-    network_mode: host  # Use host network to reach livekit and ollama
+    network_mode: host  # Use host network to reach livekit (WebRTC) and host-exposed services
     depends_on:
       ollama:
         condition: service_healthy
@@ -94,9 +139,9 @@ services:
         condition: service_started
     environment:
       - STT_DEVICE=${STT_DEVICE:-cuda}
-      - OLLAMA_HOST=localhost:11434
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen3:8b}
-      - LIVEKIT_URL=ws://localhost:7880
+      - OLLAMA_HOST=localhost:11434  # Access via host network since ollama exposes port to host
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-mistral:7b}
+      - LIVEKIT_URL=ws://localhost:7880  # Access livekit on host network
       - LIVEKIT_API_KEY=devkey
       - LIVEKIT_API_SECRET=secret
     volumes:
@@ -119,39 +164,42 @@ services:
       retries: 5
       start_period: 60s  # Allow time for model loading
 
-  open-webui:
-    image: ghcr.io/open-webui/open-webui:main
-    container_name: open-webui
-    network_mode: host  # Use host network to reach ollama
+  homepage:
+    image: ghcr.io/gethomepage/homepage:latest
+    container_name: homepage
+    networks:
+      - alfred-network
+    ports:
+      - "3000:3000"
     environment:
-      PORT: 3000
-      OLLAMA_BASE_URL: http://localhost:11434
+      - HOMEPAGE_ALLOWED_HOSTS=${LIVEKIT_NODE_IP}:3000,localhost:3000
+      - HOMEPAGE_HOST=${HOMEPAGE_HOST:-localhost}
     volumes:
-      - webui_data:/app/backend/data
-    depends_on:
-      ollama:
-        condition: service_healthy
-      ollama-init:
-        condition: service_completed_successfully
-    restart: always
+      - ./homepage/config:/app/config
+      - ./homepage/background-1.jpg:/app/public/images/background-1.jpg:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
 
   n8n:
     image: docker.n8n.io/n8nio/n8n
     container_name: n8n
-    network_mode: host
+    networks:
+      - alfred-network
     environment:
       N8N_PORT: 5678
       N8N_HOST: 0.0.0.0
     ports:
       - "5678:5678"
     volumes:
-      - n8n_data:/home/node/.n8n 
+      - n8n_data:/home/node/.n8n
     restart: always
+
+networks:
+  alfred-network:
+    driver: bridge
 
 volumes:
   ollama_data:
-    driver: local
-  webui_data:
     driver: local
   n8n_data:
     driver: local

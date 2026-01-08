@@ -1,0 +1,6 @@
+---
+# Homepage Docker integration
+# Documentation: https://gethomepage.dev/configs/docker/
+
+local:
+  socket: /var/run/docker.sock
