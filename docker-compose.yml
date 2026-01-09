@@ -194,6 +194,23 @@ services:
       - n8n_data:/home/node/.n8n
     restart: always
 
+  mcp-service:
+    build:
+      context: .
+      dockerfile: mcp-service/Dockerfile
+    container_name: mcp-service
+    restart: unless-stopped
+    networks:
+      - alfred-network
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/sse"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
 networks:
   alfred-network:
     driver: bridge
