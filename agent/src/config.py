@@ -33,8 +33,11 @@ STT_DEVICE = os.environ.get("STT_DEVICE", "cpu").lower()
 
 # Ollama Configuration
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "localhost:11434")
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "mistral:7b")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen3:8b")
 OLLAMA_TEMPERATURE = float(os.environ.get("OLLAMA_TEMPERATURE", "0.8"))
+
+# MCP Service Configuration
+MCP_SERVICE_URL = os.environ.get("MCP_SERVICE_URL", "http://mcp-service:8000/mcp")
 
 # TTS config
 TTS_HOST = os.environ.get("TTS_HOST", "http://localhost:11800")

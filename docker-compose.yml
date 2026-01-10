@@ -41,10 +41,10 @@ services:
       - |
         echo "Waiting for Ollama to be ready..."
         sleep 5
-        echo "Pulling mistral:7b model..."
-        curl -X POST http://local-ollama:11434/api/pull -d '{"name": "mistral:7b"}'
+        echo "Pulling qwen3:8b model..."
+        curl -X POST http://local-ollama:11434/api/pull -d '{"name": "qwen3:8b"}'
         echo "Model pulled. Keeping it loaded..."
-        curl -X POST http://local-ollama:11434/api/generate -d '{"model": "mistral:7b", "prompt": "test", "keep_alive": -1}'
+        curl -X POST http://local-ollama:11434/api/generate -d '{"model": "qwen3:8b", "prompt": "test", "keep_alive": -1}'
         echo "Init complete"
 
   f5-tts-service:
@@ -137,10 +137,13 @@ services:
         condition: service_healthy
       livekit-server:
         condition: service_started
+      mcp-service:
+        condition: service_healthy
     environment:
       - STT_DEVICE=${STT_DEVICE:-cuda}
       - OLLAMA_HOST=localhost:11434  # Access via host network since ollama exposes port to host
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-mistral:7b}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen3:8b}
+      - MCP_SERVICE_URL=http://localhost:8000/mcp  # Access via host network
       - LIVEKIT_URL=ws://localhost:7880  # Access livekit on host network
       - LIVEKIT_API_KEY=devkey
       - LIVEKIT_API_SECRET=secret
@@ -174,6 +177,8 @@ services:
     environment:
       - HOMEPAGE_ALLOWED_HOSTS=${LIVEKIT_NODE_IP}:3000,localhost:3000
       - HOMEPAGE_HOST=${HOMEPAGE_HOST:-localhost}
+      - PUID=${LOCAL_USER_ID:-1000}
+      - PGID=${LOCAL_GROUP_ID:-1000}
     volumes:
       - ./homepage/config:/app/config
       - ./homepage/background-1.jpg:/app/public/images/background-1.jpg:ro
@@ -205,7 +210,7 @@ services:
     ports:
       - "8000:8000"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/sse"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
       timeout: 5s
       retries: 3

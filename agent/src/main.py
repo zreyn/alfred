@@ -6,11 +6,12 @@ A voice AI agent using LiveKit Agents framework with custom F5-TTS and Faster-Wh
 
 import logging
 import time
+import asyncio
 
 from dotenv import load_dotenv
 
 from livekit import agents
-from livekit.agents import AgentSession, Agent, JobContext, JobProcess
+from livekit.agents import AgentSession, Agent, JobContext, JobProcess, mcp
 from livekit.plugins import openai as lk_openai
 from livekit.plugins import silero
 
@@ -24,6 +25,7 @@ from config import (
     OLLAMA_HOST,
     OLLAMA_MODEL,
     OLLAMA_TEMPERATURE,
+    MCP_SERVICE_URL,
 )
 
 
@@ -116,6 +118,9 @@ async def entrypoint(ctx: JobContext):
             base_url=f"http://{OLLAMA_HOST}/v1",
             temperature=OLLAMA_TEMPERATURE,
         ),
+        mcp_servers=[
+            mcp.MCPServerHTTP(url=MCP_SERVICE_URL),
+        ],
     )
 
     # Round-trip latency tracking (STT done -> LLM + TTS start)
@@ -135,6 +140,11 @@ async def entrypoint(ctx: JobContext):
             latency_ms = (time.perf_counter() - _transcription_time) * 1000
             logger.info(f"ROUND-TRIP LATENCY: {latency_ms:.0f}ms (LLM + TTS)")
             _transcription_time = None
+
+    @session.on("function_calls_collected")
+    def on_function_calls(ev) -> None:
+        for fn in ev.function_calls:
+            logger.info(f"MCP tool call: {fn.name}({fn.arguments})")
 
     # Start the session with our agent
     await session.start(
