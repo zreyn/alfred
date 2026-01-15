@@ -204,11 +204,16 @@ services:
       context: .
       dockerfile: mcp-service/Dockerfile
     container_name: mcp-service
+    user: ${LOCAL_USER_ID:-1000}:${LOCAL_GROUP_ID:-1000}
     restart: unless-stopped
     networks:
       - alfred-network
     ports:
       - "8000:8000"
+    volumes:
+      - ./mcp-service/data:/app/data
+    environment:
+      - NOTES_DB_PATH=/app/data/notes.db
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s

@@ -20,6 +20,7 @@ dependencies = [
     "torchaudio>=2.9.1",
     "uvicorn",
     "fastapi",
+    "mcp>=1.0.0",
 ]
 
 [project.optional-dependencies]

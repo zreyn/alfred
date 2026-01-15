@@ -162,13 +162,8 @@ async def entrypoint(ctx: JobContext):
 
     logger.info("Agent session started.")
 
-    try:
-        # Wait until session closes (room disconnects, etc.)
-        await close_event.wait()
-
-    finally:
-        # Unregister session on cleanup
-        session_registry.unregister(ctx.room.name)
+    # Wait until session closes (room disconnects, etc.)
+    await close_event.wait()
 
 
 def main():
