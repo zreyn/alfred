@@ -8,6 +8,7 @@ import logging
 import time
 import asyncio
 
+import httpx
 from dotenv import load_dotenv
 
 from livekit import agents
@@ -155,15 +156,44 @@ async def entrypoint(ctx: JobContext):
     # Create event to wait for session close
     close_event = asyncio.Event()
 
+    async def finalize_memory():
+        """Call memory_finalize MCP tool to persist conversation memories."""
+        # Extract base URL from MCP_SERVICE_URL (remove /mcp suffix)
+        base_url = MCP_SERVICE_URL.rsplit("/mcp", 1)[0]
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    f"{base_url}/mcp",
+                    json={
+                        "jsonrpc": "2.0",
+                        "method": "tools/call",
+                        "params": {
+                            "name": "memory_finalize",
+                            "arguments": {},
+                        },
+                        "id": 1,
+                    },
+                )
+                response.raise_for_status()
+                result = response.json()
+                logger.info(f"Memory finalized: {result}")
+        except Exception as e:
+            logger.warning(f"Failed to finalize memory: {e}")
+
     @session.on("close")
     def on_session_close(ev) -> None:
         logger.info(f"Session closed: {ev.reason}")
+        # Schedule memory finalization before signaling close
+        asyncio.create_task(finalize_memory())
         close_event.set()
 
     logger.info("Agent session started.")
 
     # Wait until session closes (room disconnects, etc.)
     await close_event.wait()
+
+    # Give memory finalization a moment to complete
+    await asyncio.sleep(1.0)
 
 
 def main():

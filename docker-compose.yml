@@ -43,8 +43,11 @@ services:
         sleep 5
         echo "Pulling qwen3:8b model..."
         curl -X POST http://local-ollama:11434/api/pull -d '{"name": "qwen3:8b"}'
-        echo "Model pulled. Keeping it loaded..."
+        echo "Pulling qwen3-embedding:0.6b model for memory..."
+        curl -X POST http://local-ollama:11434/api/pull -d '{"name": "qwen3-embedding:0.6b"}'
+        echo "Models pulled. Keeping models loaded..."
         curl -X POST http://local-ollama:11434/api/generate -d '{"model": "qwen3:8b", "prompt": "test", "keep_alive": -1}'
+        curl -X POST http://local-ollama:11434/api/embed -d '{"model": "qwen3-embedding:0.6b", "input": "test", "keep_alive": -1}'
         echo "Init complete"
 
   f5-tts-service:
@@ -214,6 +217,14 @@ services:
       - ./mcp-service/data:/app/data
     environment:
       - NOTES_DB_PATH=/app/data/notes.db
+      # SimpleMem memory configuration
+      - MEMORY_DB_PATH=/app/data/memory
+      - OLLAMA_HOST=http://local-ollama:11434
+      - EMBEDDING_MODEL=qwen3-embedding:0.6b
+      - LLM_MODEL=qwen3:8b
+    depends_on:
+      ollama:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
