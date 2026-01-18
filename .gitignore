@@ -183,3 +183,6 @@ cython_debug/
 
 # MCP service data (SQLite database)
 mcp-service/data/
+
+# Claude things
+.claude/*
